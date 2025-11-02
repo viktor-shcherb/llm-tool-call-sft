@@ -1,17 +1,19 @@
 run:
   output_dir: "checkpoints/car-sales-sft"
   seed: 42
-  report_to: "none"        # "none", "wandb", "tensorboard"
+  report_to: "wandb"
 
 data:
+  load_module: "car_sales"
   dataset_name: "Salesteq/car-sales-convos"
   timezone: "Europe/Zurich"
   sysprompt_path: "data/sysprompt.md"
   tools_path: "data/tool_calls.json"
 
   # context / tokenization
-  max_position_fallback: 8192          # used if model.config.max_position_embeddings is missing
-  drop_oversized: true                 # true = drop samples > max_ctx. false = (future) truncate
+  tokenizer: "viktoroo/SmolLM2-360M-Tools"
+  max_context_length: 8192
+  drop_oversized: true
   n_tool_sessions_eval: 64             # for tool eval construction
 
 model:

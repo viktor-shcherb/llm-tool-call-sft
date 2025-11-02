@@ -5,8 +5,6 @@ aiosignal==1.4.0
 annotated-types==0.7.0
 anyio==4.11.0
 attrs==25.4.0
-# Editable Git install with no remote (car-sales-train==0.0.1)
--e /Users/Viktor/PycharmProjects/llm-tool-call-sft
 certifi==2025.10.5
 charset-normalizer==3.4.4
 click==8.3.0

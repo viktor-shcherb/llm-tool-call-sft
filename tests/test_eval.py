@@ -1,14 +1,12 @@
 import torch
 import math
-import pytest
-from eval import (
+from trainer.eval_metrics import (
     eval_perplexity,
     prepare_tool_eval_examples,
     eval_tool_calls,
     _parse_predicted_tool_calls,
     _f1_precision_recall,
 )
-from types import SimpleNamespace
 
 
 def test_eval_perplexity_smoke(tiny_model_and_tokenizer, toy_tokenized_dataset):
@@ -77,13 +75,10 @@ def test_tool_eval_metrics_perfect_match(
     Confirms metric math gives 1.0 when model is perfect.
     """
 
-    from eval import eval_tool_calls, prepare_tool_eval_examples
+    from trainer.eval_metrics import eval_tool_calls, prepare_tool_eval_examples
 
     # Build eval examples from the raw sessions
-    examples = prepare_tool_eval_examples(
-        raw_sessions_fixture,
-        global_tools_fixture,
-    )
+    examples = prepare_tool_eval_examples(raw_sessions_fixture)
 
     # gold-like generations
     tool_call_generation = (
@@ -138,7 +133,7 @@ def test_tool_eval_metrics_perfect_match(
 
     # patch eval._generate_assistant_turn so eval_tool_calls uses our deterministic stub
     monkeypatch.setattr(
-        "eval._generate_assistant_turn",
+        "trainer.eval_metrics._generate_assistant_turn",
         fake_generate_assistant_turn,
         raising=True,
     )
@@ -186,10 +181,7 @@ def test_tool_eval_metrics_real_model_smoke(
     device = torch.device("cpu")
 
     # build eval examples from fixture sessions
-    examples = prepare_tool_eval_examples(
-        raw_sessions_fixture,
-        global_tools_fixture,
-    )
+    examples = prepare_tool_eval_examples(raw_sessions_fixture)
 
     # run eval_tool_calls end to end with real .generate()
     metrics = eval_tool_calls(
