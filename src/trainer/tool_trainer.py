@@ -1,3 +1,4 @@
+import random
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -31,6 +32,7 @@ class ToolTrainer(Trainer):
         global_tools,
         max_new_tokens_eval: int,
         temperature_eval: float,
+        n_short_eval_examples: int,
         **kwargs,
     ):
         """
@@ -48,6 +50,7 @@ class ToolTrainer(Trainer):
         self.global_tools = global_tools or []
         self.max_new_tokens_eval = max_new_tokens_eval
         self.temperature_eval = temperature_eval
+        self.n_short_eval_examples = n_short_eval_examples
 
     def evaluate(
         self,
@@ -81,15 +84,17 @@ class ToolTrainer(Trainer):
             metrics[f"{metric_key_prefix}_loss_masked"] = ppl_stats["loss"]
             metrics[f"{metric_key_prefix}_num_tokens"] = ppl_stats["num_tokens"]
 
+            examples = self.tool_eval_examples
+            if not metric_key_prefix.startswith("full"):
+                examples = random.sample(examples, min(self.n_short_eval_examples, len(examples)))
+
             # 2. Tool-call behavior quality
             tool_stats = eval_tool_calls(
                 model=self.model,
                 tokenizer=self.tokenizer_for_tools,
-                examples=self.tool_eval_examples,
+                examples=examples,
                 global_tools=self.global_tools,
-                device=self.model.device
-                if isinstance(self.model, torch.nn.Module)
-                else torch.device("cpu"),
+                device=self.model.device,
                 max_new_tokens=self.max_new_tokens_eval,
                 temperature=self.temperature_eval,
             )

@@ -135,7 +135,7 @@ def _build_tool_eval_examples(
 
 def build_datasets(
     cfg: Dict[str, Any],
-) -> Tuple[Dataset, Dataset, List[Any], List[Any], List[Dict[str, Any]], int]:
+) -> Tuple[Dataset, Dataset, List[Any], List[Dict[str, Any]], int]:
     """
     End-to-end dataset prep for this domain.
 
@@ -227,16 +227,11 @@ def build_datasets(
         timezone_str=timezone_str,
         n_sessions=None,
     )
-    tool_eval_examples_short = random.sample(
-        tool_eval_examples,
-        k=min(data_cfg["n_tool_sessions_eval"], len(tool_eval_examples)),
-    )
 
     return (
         train_proc,
         test_proc,
         tool_eval_examples,
-        tool_eval_examples_short,
         global_tools,
         max_ctx,
     )
