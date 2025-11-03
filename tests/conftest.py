@@ -33,7 +33,7 @@ def tiny_model_and_tokenizer():
     Load the tiny instruct model used for smoke eval.
     We set pad_token_id if missing so eval_perplexity does not crash.
     """
-    model_name = "HuggingFaceTB/SmolLM2-360M-Instruct"
+    model_name = "viktoroo/gemma-3-270m-tools" # "HuggingFaceTB/SmolLM2-360M-Instruct"
     tok = AutoTokenizer.from_pretrained(model_name, use_fast=False)
     model = AutoModelForCausalLM.from_pretrained(model_name)
     if model.config.pad_token_id is None:

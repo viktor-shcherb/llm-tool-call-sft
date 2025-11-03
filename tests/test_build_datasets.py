@@ -66,6 +66,9 @@ def fake_cfg():
             "max_context_length": 12,
             "drop_oversized": True,
             "n_tool_sessions_eval": 4,
+        },
+        "eval": {
+            "max_new_tokens_eval": 0,
         }
     }
 
