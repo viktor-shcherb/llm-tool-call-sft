@@ -208,7 +208,7 @@ def build_datasets(
 
     # 4. context filtering
     max_ctx = int(data_cfg["max_context_length"])
-    max_gen = int(cfg["eval"]["max_generation_length"])
+    max_gen = int(cfg["eval"]["max_new_tokens_eval"])
 
     if data_cfg["drop_oversized"]:
         train_proc = train_proc.filter(
