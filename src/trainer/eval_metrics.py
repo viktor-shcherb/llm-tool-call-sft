@@ -7,7 +7,7 @@ from copy import deepcopy
 from typing import List, Dict, Any, Tuple
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, DistributedSampler
 from tqdm import tqdm
 
 IGNORE_INDEX = -100
@@ -38,6 +38,15 @@ def _unwrap_model(m):
     return m.module if hasattr(m, "module") else m
 
 
+def _unwrap_for_config(m):
+    # for DDP: return .module
+    # for FSDP: we have to read config from the wrapped module if present
+    if _is_fsdp(m):
+        # FSDP usually stores the real module in .module
+        return getattr(m, "module", m)
+    return m.module if hasattr(m, "module") else m
+
+
 ############################################
 # 1. Perplexity eval
 ############################################
@@ -49,81 +58,104 @@ def eval_perplexity(
     batch_size: int,
     device: torch.device,
 ):
-    """
-    Compute mean loss over non-ignored tokens and perplexity.
+    # distributed env info
+    import torch.distributed as dist
+    dist_on = dist.is_available() and dist.is_initialized()
+    rank = dist.get_rank() if dist_on else 0
+    world_size = dist.get_world_size() if dist_on else 1
 
-    Works with:
-    - plain HF models
-    - DDP-wrapped models
-    - FSDP-wrapped models
-    """
-    # wrapper we must call
     exec_model = model
-    # inner for config
-    base_model = _unwrap_model(model)
+    base_model = _unwrap_for_config(model)
 
     exec_model.eval()
 
-    # only move plain models; DDP/FSDP are already placed
-    if not _is_fsdp(exec_model) and not hasattr(exec_model, "module"):
+    # only move plain model
+    if not dist_on and not _is_fsdp(exec_model) and not hasattr(exec_model, "module"):
         exec_model.to(device)
 
     pad_id = getattr(base_model.config, "pad_token_id", None)
     if pad_id is None:
         pad_id = base_model.config.eos_token_id
 
+    # shard dataset over ranks
+    sampler = (
+        DistributedSampler(
+            dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=False,
+            drop_last=False,
+        )
+        if dist_on
+        else None
+    )
+
     def _collate(batch):
         input_ids = [b["input_ids"] for b in batch]
         attention_mask = [b["attention_mask"] for b in batch]
         labels = [b["labels"] for b in batch]
-
         return {
             "input_ids": torch.nn.utils.rnn.pad_sequence(
-                input_ids,
-                batch_first=True,
-                padding_value=pad_id,
+                input_ids, batch_first=True, padding_value=pad_id
             ),
             "attention_mask": torch.nn.utils.rnn.pad_sequence(
-                attention_mask,
-                batch_first=True,
-                padding_value=0,
+                attention_mask, batch_first=True, padding_value=0
             ),
             "labels": torch.nn.utils.rnn.pad_sequence(
-                labels,
-                batch_first=True,
-                padding_value=IGNORE_INDEX,
+                labels, batch_first=True, padding_value=IGNORE_INDEX
             ),
         }
 
     dl = DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=False if sampler is not None else False,
+        sampler=sampler,
         collate_fn=_collate,
     )
 
-    total_loss = 0.0
-    total_tokens = 0
+    local_loss_sum = 0.0
+    local_token_sum = 0
 
-    for batch in tqdm(dl, desc="eval_perplexity", leave=False):
+    for batch in tqdm(
+        dl,
+        desc="eval_perplexity",
+        leave=False,
+        disable=(rank != 0),
+    ):
         input_ids = batch["input_ids"].to(device, non_blocking=True)
         attention_mask = batch["attention_mask"].to(device, non_blocking=True)
         labels = batch["labels"].to(device, non_blocking=True)
 
-        out = exec_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=labels,
-        )
-        loss = out.loss
+        # optional speedup on GPUs
+        with torch.cuda.amp.autocast(enabled=torch.cuda.is_available()):
+            out = exec_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels,
+            )
+            loss = out.loss
 
         valid_count = (labels != IGNORE_INDEX).sum().item()
-        total_loss += loss.item() * valid_count
-        total_tokens += valid_count
+        local_loss_sum += loss.item() * valid_count
+        local_token_sum += valid_count
+
+    # aggregate across ranks
+    loss_tokens = torch.tensor(
+        [local_loss_sum, float(local_token_sum)],
+        device=device,
+        dtype=torch.float64,
+    )
+    if dist_on:
+        dist.all_reduce(loss_tokens, op=dist.ReduceOp.SUM)
+
+    total_loss = float(loss_tokens[0].item())
+    total_tokens = int(loss_tokens[1].item())
 
     mean_loss = total_loss / max(total_tokens, 1)
     ppl = float(torch.exp(torch.tensor(mean_loss)))
 
+    # everyone returns the same dict so HF Trainer is happy
     return {
         "loss": mean_loss,
         "perplexity": ppl,
