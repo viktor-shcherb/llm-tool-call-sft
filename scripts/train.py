@@ -93,17 +93,13 @@ def main():
         n_short_eval_examples=cfg["data"]["n_tool_sessions_eval"],
     )
 
-    if is_main_process():
-        trainer.evaluate(eval_dataset, metric_key_prefix="full_eval")
-    barrier()
+    trainer.evaluate(eval_dataset, metric_key_prefix="full_eval")
 
     trainer.train()
 
-    if is_main_process():
-        trainer.save_model()
-        trainer.evaluate(eval_dataset, metric_key_prefix="full_eval")
-        trainer.push_to_hub(commit_message="train: finish")
-    barrier()
+    trainer.save_model()
+    trainer.evaluate(eval_dataset, metric_key_prefix="full_eval")
+    trainer.push_to_hub(commit_message="train: finish")
 
 
 if __name__ == "__main__":
