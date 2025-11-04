@@ -6,7 +6,7 @@ data:
   tools_path: "data/tool_calls.json"
 
   tokenizer: "Qwen/Qwen3-4B-Instruct-2507"
-  max_context_length: 16384
+  max_context_length: 8192
   drop_oversized: true
   n_tool_sessions_eval: 64
 
@@ -39,9 +39,9 @@ train:
   report_to: "wandb"
 
   # core trainer args
-  per_device_train_batch_size: 2
-  per_device_eval_batch_size: 2
-  gradient_accumulation_steps: 4
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 8
   gradient_checkpointing: false
   num_train_epochs: 4
 
