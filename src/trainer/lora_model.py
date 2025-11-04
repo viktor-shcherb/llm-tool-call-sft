@@ -99,6 +99,8 @@ def build_model_and_tokenizer(
     model = AutoModelForCausalLM.from_pretrained(
         base_model_name,
         dtype=torch_dtype,
+        trust_remote_code=True,
+        low_cpu_mem_usage=True,
     )
 
     # pad token handling
