@@ -6,6 +6,7 @@ import yaml
 import random
 import numpy as np
 import torch
+import torch.distributed as dist
 from transformers import TrainingArguments
 
 from trainer.lora_model import build_model_and_tokenizer
@@ -37,6 +38,17 @@ def _load_data_module(cfg: Dict[str, Any]):
 
 def _build_training_args(cfg: Dict[str, Any]) -> TrainingArguments:
     return TrainingArguments(**cfg["train"])
+
+
+def is_main_process() -> bool:
+    if not dist.is_available() or not dist.is_initialized():
+        return True
+    return dist.get_rank() == 0
+
+
+def barrier():
+    if dist.is_available() and dist.is_initialized():
+        dist.barrier()
 
 
 def main():
@@ -81,11 +93,17 @@ def main():
         n_short_eval_examples=cfg["data"]["n_tool_sessions_eval"],
     )
 
-    trainer.evaluate(eval_dataset, metric_key_prefix="full_eval")
+    if is_main_process():
+        trainer.evaluate(eval_dataset, metric_key_prefix="full_eval")
+    barrier()
+
     trainer.train()
-    trainer.save_model()
-    trainer.evaluate(eval_dataset, metric_key_prefix="full_eval")
-    trainer.push_to_hub(commit_message="train: finish")
+
+    if is_main_process():
+        trainer.save_model()
+        trainer.evaluate(eval_dataset, metric_key_prefix="full_eval")
+        trainer.push_to_hub(commit_message="train: finish")
+    barrier()
 
 
 if __name__ == "__main__":
