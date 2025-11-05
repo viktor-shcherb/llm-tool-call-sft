@@ -15,16 +15,15 @@ Requirements:
 
 import argparse
 import importlib
-import os
 from typing import Any, Dict
 
 import yaml
 from transformers import AutoTokenizer
 
-from trainer.eval_metrics import (
-    prepare_tool_eval_examples,
-    eval_tool_calls,
-)
+from trainer.eval_metrics import eval_tool_calls
+
+import dotenv
+dotenv.load_dotenv()
 
 
 def load_cfg(path: str) -> Dict[str, Any]:
