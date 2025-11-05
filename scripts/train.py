@@ -93,58 +93,6 @@ def _export_merged_for_vllm(
         tokenizer.save_pretrained(export_dir)
 
 
-def run_vllm_tool_eval_and_log(
-    trainer: Trainer,
-    tokenizer,
-    tool_eval_examples,
-    global_tools,
-    max_ctx: int,
-    prefix: str,
-    cfg: Dict[str, Any],
-    fsdp_wrapped: bool,
-):
-    # 1) save adapter on rank 0
-    if is_main_process():
-        if fsdp_wrapped:
-            trainer.save_model()  # adapter to trainer.args.output_dir
-        else:
-            trainer.model.save_pretrained(trainer.args.output_dir)
-        if tokenizer is not None:
-            tokenizer.save_pretrained(trainer.args.output_dir)
-    barrier()
-
-    # 2) rank 0 builds merged model dir
-    merged_dir = os.path.join(trainer.args.output_dir, "vllm_merged")
-    if is_main_process():
-        _export_merged_for_vllm(
-            adapter_dir=trainer.args.output_dir,
-            tokenizer=tokenizer,
-            cfg=cfg,
-            export_dir=merged_dir,
-        )
-    barrier()
-
-    # 3) only rank 0 runs vLLM
-    if not is_main_process():
-        barrier()
-        return
-
-    metrics = eval_tool_calls(
-        model_path=merged_dir,
-        tokenizer=tokenizer,
-        examples=tool_eval_examples,
-        global_tools=global_tools,
-        max_model_len=max_ctx,
-        max_new_tokens=256,
-        temperature=0.0,
-        tensor_parallel_size=1,
-    )
-
-    trainer.log_metrics(prefix, metrics)
-    trainer.save_metrics(prefix, metrics)
-    barrier()
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True, help="Path to YAML config")
@@ -181,32 +129,7 @@ def main():
         processing_class=tokenizer,
     )
 
-    # pre-train vLLM tool eval
-    run_vllm_tool_eval_and_log(
-        trainer=trainer,
-        tokenizer=tokenizer,
-        tool_eval_examples=tool_eval_examples,
-        global_tools=global_tools,
-        max_ctx=max_ctx,
-        prefix="tool_eval_pre",
-        cfg=cfg,
-        fsdp_wrapped=False,
-    )
-
     trainer.train()
-
-    # post-train vLLM tool eval
-    run_vllm_tool_eval_and_log(
-        trainer=trainer,
-        tokenizer=tokenizer,
-        tool_eval_examples=tool_eval_examples,
-        global_tools=global_tools,
-        max_ctx=max_ctx,
-        prefix="tool_eval_post",
-        cfg=cfg,
-        fsdp_wrapped=True,
-    )
-
     if is_main_process():
         trainer.push_to_hub(commit_message="train: finish")
 
