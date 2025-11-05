@@ -51,21 +51,28 @@ def barrier():
         dist.barrier()
 
 
-def run_tool_eval_and_log(
+def run_vllm_tool_eval_and_log(
     trainer: Trainer,
     tokenizer,
     tool_eval_examples,
     global_tools,
     max_ctx: int,
     prefix: str,
+    fsdp_wrapped: bool,
 ):
-    # ensure model+tokenizer on disk for vLLM
+    # 1) write model+tokenizer to disk on rank 0
     if is_main_process():
-        trainer.save_model()
+        if fsdp_wrapped:
+            # after Trainer wrapped the model (after .train()), we can use the HF helper
+            trainer.save_model()
+        else:
+            # before training: model is the plain nn.Module, so save it directly
+            trainer.model.save_pretrained(trainer.args.output_dir)
         if tokenizer is not None:
             tokenizer.save_pretrained(trainer.args.output_dir)
     barrier()
 
+    # 2) only rank 0 runs vLLM
     if not is_main_process():
         barrier()
         return
@@ -120,19 +127,35 @@ def main():
         eval_dataset=eval_dataset,
         data_collator=data_collator,
         processing_class=tokenizer,
+        tokenizer_for_tools=tokenizer,
     )
 
-    # pre-train tool-call eval via vLLM
-    run_tool_eval_and_log(trainer=trainer, tokenizer=tokenizer, tool_eval_examples=tool_eval_examples,
-                          global_tools=global_tools, max_ctx=max_ctx, prefix="tool_eval_pre")
+    # pre-train vLLM tool eval (model not FSDP-wrapped yet)
+    run_vllm_tool_eval_and_log(
+        trainer=trainer,
+        tokenizer=tokenizer,
+        tool_eval_examples=tool_eval_examples,
+        global_tools=global_tools,
+        max_ctx=max_ctx,
+        prefix="tool_eval_pre",
+        fsdp_wrapped=False,
+    )
 
     trainer.train()
 
-    # post-train tool-call eval via vLLM
-    run_tool_eval_and_log(trainer=trainer, tokenizer=tokenizer, tool_eval_examples=tool_eval_examples,
-                          global_tools=global_tools, max_ctx=max_ctx, prefix="tool_eval_post")
+    # post-train vLLM tool eval (now Trainer has done the wrapping)
+    run_vllm_tool_eval_and_log(
+        trainer=trainer,
+        tokenizer=tokenizer,
+        tool_eval_examples=tool_eval_examples,
+        global_tools=global_tools,
+        max_ctx=max_ctx,
+        prefix="tool_eval_post",
+        fsdp_wrapped=True,
+    )
 
-    trainer.push_to_hub(commit_message="train: finish")
+    if is_main_process():
+        trainer.push_to_hub(commit_message="train: finish")
 
 
 if __name__ == "__main__":
