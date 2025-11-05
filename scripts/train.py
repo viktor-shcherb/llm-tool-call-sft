@@ -127,7 +127,6 @@ def main():
         eval_dataset=eval_dataset,
         data_collator=data_collator,
         processing_class=tokenizer,
-        tokenizer_for_tools=tokenizer,
     )
 
     # pre-train vLLM tool eval (model not FSDP-wrapped yet)
