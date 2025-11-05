@@ -262,13 +262,14 @@ def eval_tool_calls(
     """
     from vllm import LLM, SamplingParams
 
+    print('Starting vLLM setup')
     llm = LLM(
         model=model_path,
         tokenizer=model_path,  # reuse the saved tokenizer in the same dir
         tensor_parallel_size=tensor_parallel_size,
         max_model_len=max_model_len,
-        trust_remote_code=True,
     )
+    print('vLLM setup done!')
 
     sampling_params = SamplingParams(
         max_tokens=max_new_tokens,
