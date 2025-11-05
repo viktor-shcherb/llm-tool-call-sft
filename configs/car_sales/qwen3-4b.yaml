@@ -15,8 +15,8 @@ model:
   pad_token_fallback: "eos"
 
 lora:
-  r: 64
-  alpha: 128
+  r: 16
+  alpha: 32
   dropout: 0.05
   target_modules:
     - q_proj
@@ -38,7 +38,7 @@ train:
   per_device_eval_batch_size: 1
   gradient_accumulation_steps: 4
   gradient_checkpointing: false
-  num_train_epochs: 4
+  num_train_epochs: 3
 
   learning_rate: 0.0002
   weight_decay: 0.0
