@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import random
@@ -175,39 +176,47 @@ def _openaiify_messages(messages):
     return out
 
 
-def eval_tool_calls(
-    client: OpenAI,
+async def eval_tool_calls(
+    client,
     model: str,
-    tokenizer,
-    examples: List[ToolEvalTurn],
+    examples: List["ToolEvalTurn"],
     global_tools: List[Dict[str, Any]],
-    max_model_len: int,
     max_new_tokens: int = 256,
     temperature: float = 0.0,
     lora_name: Optional[str] = None,
+    concurrency: int = 8,
 ) -> Dict[str, float]:
+    """
+    Run tool-call evaluation for many examples concurrently.
+    Assumes `client` has an async `chat.completions.create(...)`.
+    """
+
+    sem = asyncio.Semaphore(concurrency)
     per_example_metrics: List[Dict[str, Any]] = []
 
-    for ex in examples:
+    async def _run_one(ex: "ToolEvalTurn") -> Optional[Dict[str, Any]]:
         shuffled_tools = _deterministic_shuffle_tools(global_tools, ex.session_id)
         messages = _openaiify_messages(ex.context_messages)
 
+        # keep original model but allow override
+        use_model = lora_name if lora_name else model
         extra_body = {}
-        if lora_name:
-            model = lora_name
+        # if you actually need to send LoRA name in body, add it here
+        # extra_body["lora"] = lora_name
 
-        try:
-            resp = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                tools=shuffled_tools,
-                max_tokens=max_new_tokens,
-                temperature=temperature,
-                extra_body=extra_body if extra_body else None,
-            )
-        except Exception as e:
-            print(f"Error evaluating tool calls: {e}")
-            continue
+        async with sem:
+            try:
+                resp = await client.chat.completions.create(
+                    model=use_model,
+                    messages=messages,
+                    tools=shuffled_tools,
+                    max_tokens=max_new_tokens,
+                    temperature=temperature,
+                    extra_body=extra_body or None,
+                )
+            except Exception as e:
+                print(f"Error evaluating tool calls for session {ex.session_id}: {e}")
+                return None
 
         choice = resp.choices[0].message
         generated_text = choice.content or ""
@@ -215,11 +224,12 @@ def eval_tool_calls(
         pred_calls, parse_failures = _parse_predicted_tool_calls(generated_text)
         gold_calls = ex.gold_tool_calls
 
+        # no tool expected
         if not ex.has_tools:
             hallucinated = 1 if len(pred_calls) > 0 else 0
-            per_example_metrics.append({"kind": "no_tool", "hallucinated": hallucinated})
-            continue
+            return {"kind": "no_tool", "hallucinated": hallucinated}
 
+        # tool expected
         gold_fn_names = [c["function"]["name"] for c in gold_calls]
         pred_fn_names = [c["function"]["name"] for c in pred_calls]
         prec, rec, f1 = _f1_precision_recall(gold_fn_names, pred_fn_names)
@@ -239,6 +249,7 @@ def eval_tool_calls(
                 arg_parse_flags.append(0)
                 arg_exact_flags.append(0)
                 continue
+
             arg_parse_flags.append(1)
             if gold_by_fn[fn]:
                 gold_args_norm = _normalize_args(gold_by_fn[fn].popleft())
@@ -249,19 +260,25 @@ def eval_tool_calls(
             else:
                 arg_exact_flags.append(0)
 
+        # account for parse failures from the whole message
         for _ in range(parse_failures):
             arg_parse_flags.append(0)
             arg_exact_flags.append(0)
 
-        per_example_metrics.append(
-            {
-                "kind": "tool",
-                "precision": prec,
-                "recall": rec,
-                "f1": f1,
-                "arg_exact_flags": arg_exact_flags,
-                "arg_parse_flags": arg_parse_flags,
-            }
-        )
+        return {
+            "kind": "tool",
+            "precision": prec,
+            "recall": rec,
+            "f1": f1,
+            "arg_exact_flags": arg_exact_flags,
+            "arg_parse_flags": arg_parse_flags,
+        }
+
+    # run all
+    results = await asyncio.gather(*[_run_one(ex) for ex in examples])
+
+    for r in results:
+        if r is not None:
+            per_example_metrics.append(r)
 
     return _aggregate_tool_metrics(per_example_metrics)
