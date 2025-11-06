@@ -270,12 +270,15 @@ You want to recreate your working virtual environment exactly.
 
 1. Clone the repo.
    
-2. Install all dependencies from `pyproject.toml` and `requirements.txt`:
-
-   ```bash
-   # install main project (editable-style)
-   uv pip install -e .
-   ```
+2. Install all dependencies from `pyproject.toml`:
+1) For training
+```bash
+uv pip install .
+```
+2) For serving and evaluation
+```bash
+uv pip install .[serve]
+```   
 
 3. Run tests:
 
@@ -286,7 +289,7 @@ You want to recreate your working virtual environment exactly.
 4. Run training:
 
    ```bash
-   uv run python scripts/train.py --config configs/car_sales.yaml
+   uv run python scripts/train.py --config configs/car_sales/qwen3-4b.yaml
    ```
 
 ## Run evaluation and inference
@@ -304,19 +307,17 @@ You want to recreate your working virtual environment exactly.
      --enable-auto-tool-choice \
      --tool-call-parser xlam
    ```
-
    This exposes an OpenAI-compatible endpoint at `http://0.0.0.0:8000/v1` and registers the LoRA under the name `carsales`.
 
 2. Run the evaluation script against that server
 
    ```bash
    PYTHONPATH=src uv run python scripts/eval.py \
-     --config configs/car_sales.yaml \
+     --config configs/car_sales/qwen3-4b.yaml \
      --endpoint http://127.0.0.1:8000/v1 \
      --model Qwen/Qwen3-4B-Instruct-2507 \
      --lora-name carsales
    ```
-
    The script:
 
    * loads the dataset from `configs/car_sales.yaml`
@@ -361,12 +362,16 @@ curl http://127.0.0.1:8000/v1/chat/completions \
    vLLM ships a simple load tool. Run it against the same model to see tokens/s and latency:
 
    ```bash
-   uv run vllm bench serve \                                                                                      --model Qwen/Qwen3-4B-Instruct-2507 \                                                                              
+   uv run vllm bench serve \
+      --backend openai \                                                                              
       --base-url http://127.0.0.1:8000 \
       --dataset-name random \
       --lora-modules carsales \
+      --model Qwen/Qwen3-4B-Instruct-2507 \
       --max-concurrency 64
    ```
+
+vllm bench serve --backend openai --base-url http://127.0.0.1:8000 --dataset-name random --model google/gemma-3-4b-it --max-concurrency 64
 
 After training finishes, the LoRA adapter and metrics are written under `run.output_dir` from the config.
 
