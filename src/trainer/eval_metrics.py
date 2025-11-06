@@ -40,18 +40,42 @@ def _parse_predicted_tool_calls(generated_text: str) -> Tuple[List[Dict[str, Any
         try:
             call_obj = json.loads(block_str)
         except Exception:
-            call_obj = None
-
-        if call_obj is None:
             parse_failures += 1
             continue
 
-        fn = call_obj.get("function", {})
+        # Normalize several possible shapes to:
+        # {"function": {"name": str, "arguments": Any}}
+        fn_obj = None
+
+        if isinstance(call_obj, dict):
+            if "function" in call_obj and isinstance(call_obj["function"], dict):
+                # expected shape
+                fn_obj = call_obj["function"]
+            else:
+                # try top-level keys
+                name = call_obj.get("name")
+                args = call_obj.get("arguments", {})
+                if name is not None:
+                    fn_obj = {"name": name, "arguments": args}
+
+        if not fn_obj:
+            # unrecognized shape
+            parse_failures += 1
+            continue
+
+        # final safety: ensure keys exist
+        name = fn_obj.get("name")
+        args = fn_obj.get("arguments", "")
+
+        if not name:
+            parse_failures += 1
+            continue
+
         predicted_calls.append(
             {
                 "function": {
-                    "name": fn.get("name", ""),
-                    "arguments": fn.get("arguments", ""),
+                    "name": name,
+                    "arguments": args,
                 }
             }
         )
