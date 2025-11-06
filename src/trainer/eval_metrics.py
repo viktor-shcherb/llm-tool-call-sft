@@ -232,6 +232,7 @@ def eval_tool_calls(
 
         choice = resp.choices[0].message
         generated_text = choice.content or ""
+        print()
         print(resp.choices[0])
 
         pred_calls, parse_failures = _parse_predicted_tool_calls(generated_text)
