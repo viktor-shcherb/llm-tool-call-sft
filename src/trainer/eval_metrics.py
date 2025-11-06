@@ -208,10 +208,11 @@ def eval_tool_calls(
 
         choice = resp.choices[0].message
         generated_text = choice.content or ""
-        print(generated_text)
 
         pred_calls, parse_failures = _parse_predicted_tool_calls(generated_text)
         gold_calls = ex.gold_tool_calls
+
+        print(f"\n\n{generated_text}\nTOOL CALL:\n{pred_calls}\nGOLD:\n{gold_calls}")
 
         if not ex.has_tools:
             hallucinated = 1 if len(pred_calls) > 0 else 0
