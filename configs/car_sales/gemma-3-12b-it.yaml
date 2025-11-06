@@ -1,0 +1,81 @@
+data:
+  load_module: "car_sales"
+  dataset_name: "Salesteq/car-sales-convos"
+  timezone: "Europe/Zurich"
+  sysprompt_path: "data/sysprompt.md"
+  tools_path: "data/tool_calls.json"
+
+  tokenizer: "viktoroo/gemma-3-12b-tools"
+  max_context_length: 8192
+  drop_oversized: true
+
+model:
+  base_model_name: "viktoroo/gemma-3-12b-tools"
+  torch_dtype: "bfloat16"
+  pad_token_fallback: "eos"
+
+lora:
+  r: 32
+  alpha: 64
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+train:
+  # basic
+  output_dir: "checkpoints/car-sales-sft"
+  seed: 42
+
+  # logging
+  report_to: "wandb"
+
+  # core trainer args
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: false
+  num_train_epochs: 5
+
+  learning_rate: 0.0002
+  weight_decay: 0.0
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.1
+
+  bf16: true
+  fp16: false
+
+  ddp_find_unused_parameters: false
+
+  logging_steps: 5
+  eval_strategy: "steps"
+  eval_steps: 20
+  save_strategy: "epoch"
+  save_total_limit: 2
+  overwrite_output_dir: false
+  remove_unused_columns: false
+
+  # hub
+  push_to_hub: true
+  hub_model_id: "Salesteq/Gemma-3-12B-CarSales"
+  hub_private_repo: true
+
+  # --- FSDP ---
+  fsdp: "full_shard auto_wrap"
+  fsdp_config:
+    fsdp_transformer_layer_cls_to_wrap: "Gemma3DecoderLayer"
+    use_orig_params: true
+    sync_module_states: true
+    forward_prefetch: true
+    state_dict_type: "full"
+
+eval:
+  max_new_tokens_eval: 256
+  temperature: 0.0
