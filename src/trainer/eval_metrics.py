@@ -215,7 +215,7 @@ def eval_tool_calls(
 
         extra_body = {}
         if lora_name:
-            extra_body["lora_name"] = lora_name
+            model = lora_name
 
         resp = client.chat.completions.create(
             model=model,
