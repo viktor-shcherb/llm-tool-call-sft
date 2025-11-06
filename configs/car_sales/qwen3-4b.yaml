@@ -4,10 +4,10 @@ data:
   timezone: "Europe/Zurich"
   sysprompt_path: "data/sysprompt.md"
   tools_path: "data/tool_calls.json"
+
   tokenizer: "Qwen/Qwen3-4B-Instruct-2507"
   max_context_length: 8192
   drop_oversized: true
-  n_tool_sessions_eval: 64
 
 model:
   base_model_name: "Qwen/Qwen3-4B-Instruct-2507"

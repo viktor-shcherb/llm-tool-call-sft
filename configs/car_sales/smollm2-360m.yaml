@@ -8,7 +8,6 @@ data:
   tokenizer: "viktoroo/SmolLM2-360M-Tools"
   max_context_length: 8192
   drop_oversized: true
-  n_tool_sessions_eval: 64
 
 model:
   base_model_name: "viktoroo/SmolLM2-360M-Tools"
@@ -16,8 +15,8 @@ model:
   pad_token_fallback: "eos"
 
 lora:
-  r: 64
-  alpha: 128
+  r: 16
+  alpha: 32
   dropout: 0.05
   target_modules:
     - q_proj
@@ -39,11 +38,11 @@ train:
   report_to: "wandb"
 
   # core trainer args
-  per_device_train_batch_size: 2
-  per_device_eval_batch_size: 2
-  gradient_accumulation_steps: 4
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 1
   gradient_checkpointing: false
-  num_train_epochs: 5
+  num_train_epochs: 3
 
   learning_rate: 0.0002
   weight_decay: 0.0
@@ -67,6 +66,15 @@ train:
   push_to_hub: true
   hub_model_id: "Salesteq/SmolLM2-360M-CarSales"
   hub_private_repo: true
+
+  # --- FSDP ---
+  fsdp: "full_shard auto_wrap"
+  fsdp_config:
+    fsdp_transformer_layer_cls_to_wrap: "LlamaDecoderLayer"
+    use_orig_params: true
+    sync_module_states: true
+    forward_prefetch: true
+    state_dict_type: "full"3
 
 eval:
   max_new_tokens_eval: 256
