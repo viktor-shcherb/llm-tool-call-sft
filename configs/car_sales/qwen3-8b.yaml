@@ -65,7 +65,7 @@ train:
   # --- FSDP ---
   fsdp: "full_shard auto_wrap"
   fsdp_config:
-    fsdp_transformer_layer_cls_to_wrap: "Qwen3MoeDecoderLayer"
+    fsdp_transformer_layer_cls_to_wrap: "Qwen3DecoderLayer"
     use_orig_params: true
     sync_module_states: true
     forward_prefetch: true
