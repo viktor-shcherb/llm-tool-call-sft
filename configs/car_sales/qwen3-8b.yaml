@@ -69,6 +69,7 @@ train:
     use_orig_params: true
     sync_module_states: true
     forward_prefetch: true
+    activation_checkpointing: true
     state_dict_type: "full"
 
 eval:
