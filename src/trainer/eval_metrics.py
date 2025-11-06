@@ -1,4 +1,3 @@
-import gc
 import hashlib
 import json
 import random
@@ -7,7 +6,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import List, Dict, Any, Tuple, Optional
 
-import torch
+import yaml  # only if you still need it elsewhere
+from openai import OpenAI
 
 IGNORE_INDEX = -100
 _TOOL_CALL_BLOCK_RE = re.compile(
@@ -34,21 +34,6 @@ def _deterministic_shuffle_tools(
     tools_copy = deepcopy(tools)
     rng.shuffle(tools_copy)
     return tools_copy
-
-
-def _build_generation_prompt_str(
-    tokenizer,
-    context_messages: List[Dict[str, Any]],
-    tools_shuffled: List[Dict[str, Any]],
-) -> str:
-    prompt = tokenizer.apply_chat_template(
-        context_messages,
-        tools=tools_shuffled,
-        tokenize=False,
-        add_generation_prompt=True,
-        chat_template_kwargs={"enable_thinking": False},
-    )
-    return prompt
 
 
 def _parse_predicted_tool_calls(
@@ -184,74 +169,77 @@ def prepare_tool_eval_examples(raw_sessions: List[Dict[str, Any]]) -> List[ToolE
     return eval_examples
 
 
+def _truncate_messages_to_ctx(
+    tokenizer,
+    messages: List[Dict[str, Any]],
+    tools: List[Dict[str, Any]],
+    max_model_len: int,
+):
+    """
+    Keep dropping oldest messages until encoded prompt fits max_model_len.
+    Uses the same chat template as training to stay consistent.
+    """
+    if max_model_len is None:
+        return messages
+
+    msgs = list(messages)
+    while True:
+        prompt = tokenizer.apply_chat_template(
+            msgs,
+            tools=tools,
+            tokenize=False,
+            add_generation_prompt=True,
+            chat_template_kwargs={"enable_thinking": False},
+        )
+        tok_ids = tokenizer.encode(prompt)
+        if len(tok_ids) <= max_model_len or len(msgs) == 1:
+            return msgs
+        msgs = msgs[1:]
+
+
 def eval_tool_calls(
-    model_path: str,
+    client: OpenAI,
+    model: str,
     tokenizer,
     examples: List[ToolEvalTurn],
     global_tools: List[Dict[str, Any]],
     max_model_len: int,
     max_new_tokens: int = 256,
     temperature: float = 0.0,
-    tensor_parallel_size: int = 1,
-    adapter_path: Optional[str] = None,   # NEW
 ) -> Dict[str, float]:
     """
-    vLLM eval with optional LoRA.
+    Hosted vLLM/OpenAI-style eval. No local model. No LoRA.
+    We rely on the model to emit <tool_call>{...}</tool_call>.
     """
-    from vllm import LLM, SamplingParams
-    from vllm.lora.request import LoRARequest
-
-    print("Starting vLLM setup")
-    llm_kwargs: Dict[str, Any] = dict(
-        model=model_path,
-        tokenizer=model_path,
-        tensor_parallel_size=tensor_parallel_size,
-        max_model_len=max_model_len,
-    )
-
-    lora_req = None
-    if adapter_path is not None:
-        llm_kwargs["enable_lora"] = True
-        # name and id are arbitrary but must be stable
-        lora_req = LoRARequest("car-sales", 1, adapter_path)
-
-    llm = LLM(**llm_kwargs)
-    print("vLLM setup done!")
-
-    sampling_params = SamplingParams(
-        max_tokens=max_new_tokens,
-        temperature=temperature,
-        stop_token_ids=[tokenizer.eos_token_id],
-    )
-
-    prompts: List[str] = []
-    example_meta: List[ToolEvalTurn] = []
-    for ex in examples:
-        shuffled_tools = _deterministic_shuffle_tools(global_tools, ex.session_id)
-        prompt = _build_generation_prompt_str(
-            tokenizer=tokenizer,
-            context_messages=ex.context_messages,
-            tools_shuffled=shuffled_tools,
-        )
-        prompts.append(prompt)
-        example_meta.append(ex)
-
-    print("Starting vLLM generation")
-    outputs = llm.generate(
-        prompts,
-        sampling_params,
-        lora_request=lora_req,  # <- apply LoRA here
-    )
-    print("vLLM generation done!")
-
     per_example_metrics: List[Dict[str, Any]] = []
 
-    for ex, out in zip(example_meta, outputs):
-        generated_text = out.outputs[0].text
+    for ex in examples:
+        # 1) deterministic tool order
+        shuffled_tools = _deterministic_shuffle_tools(global_tools, ex.session_id)
 
+        # 2) truncate context to fit
+        truncated_messages = _truncate_messages_to_ctx(
+            tokenizer, ex.context_messages, shuffled_tools, max_model_len
+        )
+
+        # 3) call hosted model
+        resp = client.chat.completions.create(
+            model=model,
+            messages=truncated_messages,
+            tools=shuffled_tools,
+            max_tokens=max_new_tokens,
+            temperature=temperature,
+        )
+
+        choice = resp.choices[0].message
+        # model should return normal text with <tool_call> blocks
+        generated_text = choice.content or ""
+
+        # 4) parse prediction
         pred_calls, parse_failures = _parse_predicted_tool_calls(generated_text)
         gold_calls = ex.gold_tool_calls
 
+        # 5) score
         if not ex.has_tools:
             hallucinated = 1 if len(pred_calls) > 0 else 0
             per_example_metrics.append(
@@ -308,10 +296,5 @@ def eval_tool_calls(
                 "arg_parse_flags": arg_parse_flags,
             }
         )
-
-    del llm
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
 
     return _aggregate_tool_metrics(per_example_metrics)
