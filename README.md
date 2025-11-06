@@ -361,7 +361,7 @@ curl http://127.0.0.1:8000/v1/chat/completions \
    vLLM ships a simple load tool. Run it against the same model to see tokens/s and latency:
 
    ```bash
-   vllm bench serve \                                                                                      --model Qwen/Qwen3-4B-Instruct-2507 \                                                                              
+   uv run vllm bench serve \                                                                                      --model Qwen/Qwen3-4B-Instruct-2507 \                                                                              
       --base-url http://127.0.0.1:8000 \
       --dataset-name random \
       --lora-modules carsales \
