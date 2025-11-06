@@ -11,8 +11,7 @@ data:
 
 model:
   base_model_name: "Qwen/Qwen3-4B-Instruct-2507"
-  torch_dtype: "bfloat16"
-  pad_token_fallback: "eos"
+  use_cache: false
 
 lora:
   r: 16

@@ -1,6 +1,7 @@
 import argparse
 import importlib
 import os
+from copy import deepcopy
 from typing import Any, Dict
 
 import yaml
@@ -51,12 +52,6 @@ def barrier():
         dist.barrier()
 
 
-def _get_base_model_name(cfg: Dict[str, Any]) -> str:
-    # adapt to your actual config keys
-    model_cfg = cfg.get("model", {})
-    return model_cfg.get("base_model_name")
-
-
 def _export_merged_for_vllm(
     adapter_dir: str,
     tokenizer,
@@ -69,12 +64,14 @@ def _export_merged_for_vllm(
     """
     os.makedirs(export_dir, exist_ok=True)
 
-    base_model_name = _get_base_model_name(cfg)
+    model_cfg = deepcopy(cfg.get("model", {}))
+    model_name = model_cfg.pop("base_model_name")
     # load base
     base_model = AutoModelForCausalLM.from_pretrained(
-        base_model_name,
+        model_name,
         dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
         trust_remote_code=True,
+        **model_cfg
     )
 
     # load adapter onto it
