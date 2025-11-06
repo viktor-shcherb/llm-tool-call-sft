@@ -1,0 +1,76 @@
+data:
+  load_module: "car_sales"
+  dataset_name: "Salesteq/car-sales-convos"
+  timezone: "Europe/Zurich"
+  sysprompt_path: "data/sysprompt.md"
+  tools_path: "data/tool_calls.json"
+
+  tokenizer: "Qwen/Qwen3-30B-A3B-Instruct-2507"
+  max_context_length: 8192
+  drop_oversized: true
+
+model:
+  base_model_name: "Qwen/Qwen3-30B-A3B-Instruct-2507"
+  torch_dtype: "bfloat16"
+  pad_token_fallback: "eos"
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+train:
+  output_dir: "checkpoints/car-sales-sft"
+  seed: 42
+  report_to: "wandb"
+
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: true
+  num_train_epochs: 3
+
+  learning_rate: 0.0002
+  weight_decay: 0.0
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.1
+
+  bf16: true
+  fp16: false
+
+  ddp_find_unused_parameters: false
+
+  logging_steps: 5
+  eval_strategy: "steps"
+  eval_steps: 20
+  save_strategy: "epoch"
+  save_total_limit: 2
+  overwrite_output_dir: false
+  remove_unused_columns: false
+
+  push_to_hub: true
+  hub_model_id: "Salesteq/Qwen3-30B-Instruct-2507-CarSales"
+  hub_private_repo: true
+
+  # --- FSDP ---
+  fsdp: "full_shard auto_wrap"
+  fsdp_config:
+    fsdp_transformer_layer_cls_to_wrap: "Qwen3DecoderLayer"
+    use_orig_params: true
+    sync_module_states: true
+    forward_prefetch: true
+    state_dict_type: "full"
+
+eval:
+  max_new_tokens_eval: 256
+  temperature: 0.0

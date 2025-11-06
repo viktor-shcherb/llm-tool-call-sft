@@ -101,6 +101,7 @@ def build_model_and_tokenizer(
         dtype=torch_dtype,
         trust_remote_code=True,
         low_cpu_mem_usage=True,
+        attn_implementation="sdpa"
     )
 
     # pad token handling
