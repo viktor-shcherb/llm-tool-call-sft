@@ -238,6 +238,8 @@ def eval_tool_calls(
         pred_calls, parse_failures = _parse_predicted_tool_calls(generated_text)
         gold_calls = ex.gold_tool_calls
 
+        print(gold_calls)
+
         if not ex.has_tools:
             hallucinated = 1 if len(pred_calls) > 0 else 0
             return {"kind": "no_tool", "hallucinated": hallucinated}
