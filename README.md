@@ -308,7 +308,7 @@ You want to recreate your working virtual environment exactly.
 2. Run the evaluation script against that server
 
    ```bash
-   uv run python scripts/eval.py \
+   PYTHONPATH=src uv run python scripts/eval.py \
      --config configs/car_sales.yaml \
      --endpoint http://127.0.0.1:8000/v1 \
      --model Qwen/Qwen3-4B-Instruct-2507 \

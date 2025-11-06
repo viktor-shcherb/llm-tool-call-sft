@@ -8,6 +8,9 @@ from transformers import AutoTokenizer
 
 from trainer.eval_metrics import eval_tool_calls
 
+import dotenv
+dotenv.load_dotenv()
+
 
 def load_cfg(path: str):
     with open(path, "r") as f:
