@@ -147,24 +147,6 @@ def prepare_tool_eval_examples(raw_sessions: List[Dict[str, Any]]) -> List[ToolE
     return eval_examples
 
 
-def _truncate_messages_to_ctx(tokenizer, messages, tools, max_model_len: int):
-    if max_model_len is None:
-        return messages
-    msgs = list(messages)
-    while True:
-        prompt = tokenizer.apply_chat_template(
-            msgs,
-            tools=tools,
-            tokenize=False,
-            add_generation_prompt=True,
-            chat_template_kwargs={"enable_thinking": False},
-        )
-        tok_ids = tokenizer.encode(prompt)
-        if len(tok_ids) <= max_model_len or len(msgs) == 1:
-            return msgs
-        msgs = msgs[1:]
-
-
 def _openaiify_messages(messages):
     """Ensure assistant tool_call messages match OpenAI chat schema."""
     out = []
@@ -208,23 +190,24 @@ def eval_tool_calls(
 
     for ex in examples:
         shuffled_tools = _deterministic_shuffle_tools(global_tools, ex.session_id)
-
-        truncated_messages = _openaiify_messages(_truncate_messages_to_ctx(
-            tokenizer, ex.context_messages, shuffled_tools, max_model_len
-        ))
+        messages = _openaiify_messages(ex.context_messages)
 
         extra_body = {}
         if lora_name:
             model = lora_name
 
-        resp = client.chat.completions.create(
-            model=model,
-            messages=truncated_messages,
-            tools=shuffled_tools,
-            max_tokens=max_new_tokens,
-            temperature=temperature,
-            extra_body=extra_body if extra_body else None,
-        )
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=shuffled_tools,
+                max_tokens=max_new_tokens,
+                temperature=temperature,
+                extra_body=extra_body if extra_body else None,
+            )
+        except Exception as e:
+            print(f"Error evaluating tool calls: {e}")
+            continue
 
         choice = resp.choices[0].message
         generated_text = choice.content or ""
