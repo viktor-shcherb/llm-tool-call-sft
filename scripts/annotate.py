@@ -26,7 +26,10 @@ def load_tools(cfg, config_path: str):
         raise ValueError("config.data.tools_path is required")
 
     cfg_dir = Path(config_path).parent
-    tools_file = (cfg_dir / tools_path) if not Path(tools_path).is_absolute() else Path(tools_path)
+    if not Path(tools_path).is_absolute() and (cfg_dir / tools_path).is_file():
+        tools_file = cfg_dir / tools_path
+    else:
+        tools_file = Path(tools_path)
 
     with open(tools_file, "r") as f:
         tools = json.load(f)
@@ -43,7 +46,10 @@ def load_sysprompt(cfg, config_path: str):
         raise ValueError("config.data.sysprompt_path is required")
 
     cfg_dir = Path(config_path).parent
-    sp_file = (cfg_dir / sysprompt_path) if not Path(sysprompt_path).is_absolute() else Path(sysprompt_path)
+    if not Path(sysprompt_path).is_absolute() and (cfg_dir / sysprompt_path).is_file():
+        sp_file = cfg_dir / sysprompt_path
+    else:
+        sp_file = Path(sysprompt_path)
 
     with open(sp_file, "r") as f:
         return f.read()
