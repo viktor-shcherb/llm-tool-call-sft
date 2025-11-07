@@ -178,6 +178,9 @@ def main():
             idx, out = fut.result()
             annotations[idx] = out
 
+    if args.output_column in ds.column_names:
+        ds = ds.remove_columns([args.output_column])
+
     annotated_ds = ds.add_column(args.output_column, annotations)
 
     target_repo = args.push_to if args.push_to is not None else args.dataset
