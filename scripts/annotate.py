@@ -11,6 +11,8 @@ from datasets import load_dataset
 from openai import OpenAI
 
 import dotenv
+from tqdm import tqdm
+
 dotenv.load_dotenv()
 
 
@@ -172,7 +174,7 @@ def main():
 
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
         futures = [executor.submit(_annotate_one, i, ds[i]) for i in range(n)]
-        for fut in as_completed(futures):
+        for fut in tqdm(as_completed(futures), desc="Annotating", total=n):
             idx, out = fut.result()
             annotations[idx] = out
 
