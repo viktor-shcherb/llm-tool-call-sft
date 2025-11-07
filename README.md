@@ -325,7 +325,7 @@ uv pip install .[serve]
    * passes `extra_body={"lora_name": "carsales"}` so the adapter is used
    * prints the tool-call metrics
 
-3. Do ad-hoc inference (Python)
+2. Do ad-hoc inference (Python)
 
    ```bash
    uv run python - << 'PY'
@@ -343,7 +343,7 @@ uv pip install .[serve]
 
     ```
 
-4. Do ad-hoc inference (curl)
+3. Do ad-hoc inference (curl)
 
 ```bash
 curl http://127.0.0.1:8000/v1/chat/completions \
